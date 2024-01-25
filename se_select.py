@@ -5,15 +5,11 @@ from threading import Thread
 from time import perf_counter
 from typing import Dict
 
-from utils import (
-    csv_process,
-    fuse_host,
-    kobayashi_reset,
-    se_dict_util,
-    se_info_util,
-    top_ses_util,
-)
+from utils import csv_process, fuse_host, kobayashi_reset
 from utils import preferences as p
+from utils import se_dict_util, se_info_util, top_ses_util
+
+test_mode = True
 
 kobayashi_counter = 0
 rebalance = False
@@ -677,40 +673,39 @@ if kobayashi is False:
 
     collection_updates = 0
 
-    '''
-    # Add se_pair_list to cwa_matches collection
-    for x, y in se_pair_list:
-        # Add se1 and se2 to cwa_matches collection
-        assignment_date = f"assignments.{fuse_date}"
+    if test_mode is False:
+        # Add se_pair_list to cwa_matches collection
+        for x, y in se_pair_list:
+            # Add se1 and se2 to cwa_matches collection
+            assignment_date = f"assignments.{fuse_date}"
 
-        try:
-            add_se = p.cwa_matches.update_one(
-                {"SE": x},
-                {"$set": {assignment_date: y}},
-                upsert=True,
-            )
-            print(f" Added {x} match to database.")
-            collection_updates += 1
-        except Exception as e:
-            print(f"Error updating {x} to cwa_matches collection.")
-            print(e)
-            exit(1)
+            try:
+                add_se = p.cwa_matches.update_one(
+                    {"SE": x},
+                    {"$set": {assignment_date: y}},
+                    upsert=True,
+                )
+                print(f" Added {x} match to database.")
+                collection_updates += 1
+            except Exception as e:
+                print(f"Error updating {x} to cwa_matches collection.")
+                print(e)
+                exit(1)
 
-        try:
-            add_se = p.cwa_matches.update_one(
-                {"SE": y},
-                {"$set": {assignment_date: x}},
-                upsert=True,
-            )
-            print(f" Added {y} match to database.")
-            collection_updates += 1
-        except Exception as e:
-            print(f"Error adding {y} to cwa_matches collection.")
-            print(e)
-            exit(1)
+            try:
+                add_se = p.cwa_matches.update_one(
+                    {"SE": y},
+                    {"$set": {assignment_date: x}},
+                    upsert=True,
+                )
+                print(f" Added {y} match to database.")
+                collection_updates += 1
+            except Exception as e:
+                print(f"Error adding {y} to cwa_matches collection.")
+                print(e)
+                exit(1)
 
-    print(f"Collection updates: {collection_updates}")
-    '''
+            print(f"Collection updates: {collection_updates}")
 
     # remove / from fuse_date
     f_date = fuse_date.replace("/", "")
