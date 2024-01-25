@@ -7,3 +7,4 @@ utils/preferences.py
 .venv
 .mypy_cache/
 
+se_select.py
