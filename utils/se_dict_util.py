@@ -1,5 +1,8 @@
-from time import perf_counter
+from threading import current_thread
+from time import perf_counter, sleep
 from typing import Any, Dict, List
+
+from pymongo.errors import AutoReconnect
 
 from utils import preferences as p
 from utils import se_info_util
@@ -22,7 +25,23 @@ def se_count_dict(SEs: List[str]) -> Dict[str, int]:
     se_assignment_count: Dict[str, int] = {}
     start_se_assignment_dict = perf_counter()
     for x in SEs:
-        y = p.cwa_matches.find_one({"SE": x})
+        if current_thread().name == "MainThread":
+            for _ in range(5):
+                try:
+                    y = p.cwa_matches.find_one({"SE": x})
+                    break
+                except AutoReconnect as e:
+                    print(
+                        f" *** AutoReconnect error getting SE {x} from cwa_matches collection."
+                    )
+                    print(f" *** Sleeping for {pow(2, _)} seconds and trying again.")
+                    sleep(pow(2, _))
+                    print(e)
+            print(
+                " *** Failed attempt to connect to cwa_matches collection. Mongo is down."
+            )
+        else:
+            y = p.cwa_matches.find_one({"SE": x})
         if y is not None:
             # count the number of assignments for x
             count_assignments = len(y["assignments"])
