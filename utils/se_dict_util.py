@@ -2,7 +2,7 @@ from threading import current_thread
 from time import perf_counter, sleep
 from typing import Any, Dict, List
 
-from pymongo.errors import AutoReconnect
+from pymongo.errors import ConnectionFailure
 
 from utils import preferences as p
 from utils import se_info_util
@@ -30,9 +30,9 @@ def se_count_dict(SEs: List[str]) -> Dict[str, int]:
                 try:
                     y = p.cwa_matches.find_one({"SE": x})
                     break
-                except AutoReconnect as e:
+                except ConnectionFailure as e:
                     print(
-                        f" *** AutoReconnect error getting SE {x} from cwa_matches collection."
+                        f" *** Connect error getting SE {x} from cwa_matches collection."
                     )
                     print(f" *** Sleeping for {pow(2, _)} seconds and trying again.")
                     sleep(pow(2, _))

@@ -3,7 +3,7 @@ from threading import current_thread
 from time import sleep
 from typing import Any, Dict, Optional
 
-from pymongo.errors import AutoReconnect
+from pymongo.errors import ConnectionFailure
 
 from utils import preferences as p
 
@@ -15,10 +15,8 @@ def get_se_info(x: str, se_dict: dict) -> Optional[Dict[str, Any]]:
             try:
                 se_info_result = p.se_info.find_one({"se": x})
                 break
-            except AutoReconnect as e:
-                print(
-                    f" *** AutoReconnect error getting SE {x} from se_info collection."
-                )
+            except ConnectionFailure as e:
+                print(f" *** Connect error getting SE {x} from se_info collection.")
                 print(f" *** Sleeping for {pow(2, _)} seconds and trying again.")
                 sleep(pow(2, _))
                 print(e)
@@ -33,9 +31,9 @@ def get_se_info(x: str, se_dict: dict) -> Optional[Dict[str, Any]]:
                 try:
                     region_numb_result = p.cwa_regions.find_one({"Region": se_region})
                     break
-                except AutoReconnect as e:
+                except ConnectionFailure as e:
                     print(
-                        f" *** AutoReconnect error getting SE {x} from cwa_regions collection."
+                        f" *** Connect error getting SE {x} from cwa_regions collection."
                     )
                     print(f" *** Sleeping for {pow(2, _)} seconds and trying again.")
                     sleep(pow(2, _))
@@ -65,10 +63,8 @@ def add_unknown_se(x: str, full_SEs: list, se_dict: dict):
         try:
             hi_idx = p.se_info.find_one(sort=[("se_idx", -1)])
             break
-        except AutoReconnect as e:
-            print(
-                " *** AutoReconnect error getting highest se_idx from se_info collection."
-            )
+        except ConnectionFailure as e:
+            print(" *** Connect error getting highest se_idx from se_info collection.")
             print(f" *** Sleeping for {pow(2, _)} seconds and trying again.")
             sleep(pow(2, _))
             print(e)
@@ -93,10 +89,8 @@ def add_unknown_se(x: str, full_SEs: list, se_dict: dict):
             )
             print(f"SE {x} added to se_info collection.")
             break
-        except AutoReconnect as e:
-            print(
-                " *** AutoReconnect error getting highest se_idx from se_info collection."
-            )
+        except ConnectionFailure as e:
+            print(" *** Connect error getting highest se_idx from se_info collection.")
             print(f" *** Sleeping for {pow(2, _)} seconds and trying again.")
             sleep(pow(2, _))
             print(e)
@@ -111,10 +105,8 @@ def add_unknown_se(x: str, full_SEs: list, se_dict: dict):
             else:
                 print(f"SE {x} already in cwa_matches collection.")
             break
-        except AutoReconnect as e:
-            print(
-                " *** AutoReconnect error getting highest se_idx from se_info collection."
-            )
+        except ConnectionFailure as e:
+            print(" *** Connect error getting highest se_idx from se_info collection.")
             print(f" *** Sleeping for {pow(2, _)} seconds and trying again.")
             sleep(pow(2, _))
             print(e)
