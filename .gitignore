@@ -6,3 +6,4 @@ utils/preferences.py
 *.xls*
 .venv
 .mypy_cache/
+.cache*
