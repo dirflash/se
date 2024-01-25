@@ -6,5 +6,3 @@ utils/preferences.py
 *.xls*
 .venv
 .mypy_cache/
-
-se_select.py
