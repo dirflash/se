@@ -5,9 +5,15 @@ from threading import Thread
 from time import perf_counter
 from typing import Dict
 
-from utils import csv_process, fuse_host, kobayashi_reset
+from utils import (
+    csv_process,
+    fuse_host,
+    kobayashi_reset,
+    se_dict_util,
+    se_info_util,
+    top_ses_util,
+)
 from utils import preferences as p
-from utils import se_dict_util, se_info_util, top_ses_util
 
 test_mode = True
 
@@ -16,7 +22,7 @@ rebalance = False
 se_pair = []
 se_pair_list = []
 
-fuse_date = "1/1/2024"
+fuse_date = "2/9/2024"
 
 
 # Custom class to return a value from a thread
@@ -203,7 +209,7 @@ def write_matches_to_file(matches_filename):
     print(f"Writing matches to {matches_filename}")
     matches_file = open(f".\\match_files\\{matches_filename}", "w")
     # matches_file.write("SE1_NAME,SE1,SE2,SE2_NAME\n")
-    matches_file.write("SE1_NAME,SE2_NAME\n")
+    matches_file.write("SE1_NAME,SE1_CCO,SE2_CCO,SE2_NAME\n")
     for x, y in se_pair_list:
         # Lookup SE names from se_info collection
         x_name = p.se_info.find_one({"se": x})["se_name"]
@@ -712,7 +718,8 @@ if kobayashi is False:
 
     # create a csv file of the matches
     try:
-        matches_filename = f"{f_date}-matches.csv"
+        date_name = fuse_date.replace("/", "_")
+        matches_filename = f"{date_name}-matches.csv"
         write_matches_to_file(matches_filename)
     except PermissionError:
         print("PermissionError writing matches to file.")
