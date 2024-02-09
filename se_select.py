@@ -5,15 +5,9 @@ from threading import Thread
 from time import perf_counter
 from typing import Dict
 
-from utils import (
-    csv_process,
-    fuse_host,
-    kobayashi_reset,
-    se_dict_util,
-    se_info_util,
-    top_ses_util,
-)
+from utils import csv_process, fuse_host, kobayashi_reset
 from utils import preferences as p
+from utils import se_dict_util, se_info_util, top_ses_util
 
 test_mode = True
 
@@ -22,7 +16,7 @@ rebalance = False
 se_pair = []
 se_pair_list = []
 
-fuse_date = "2/9/2024"
+fuse_date = p.fuse_date
 
 
 # Custom class to return a value from a thread
