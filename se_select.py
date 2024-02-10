@@ -7,15 +7,9 @@ from typing import Dict
 
 from pymongo.errors import ConnectionFailure
 
-from utils import (
-    csv_process,
-    fuse_host,
-    kobayashi_reset,
-    se_dict_util,
-    se_info_util,
-    top_ses_util,
-)
+from utils import csv_process, fuse_host, kobayashi_reset
 from utils import preferences as p
+from utils import se_dict_util, se_info_util, top_ses_util
 
 test_mode = True
 
@@ -318,10 +312,7 @@ def update_cwa_matches(se, other_value, assignment_date, max_retries=5):
             if attempts == max_retries:
                 # Decide how to handle the error after all retries fail
                 print(f"Failed to update {se} after {max_retries} attempts.")
-                # You might want to log this error, send a notification, or take other action.
                 return False  # Update failed after retries
-            # If you need to wait before retrying, you can add a sleep here:
-            # time.sleep(some_delay)
 
 
 # Parse the received csv file and create two lists of SEs
