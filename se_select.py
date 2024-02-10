@@ -2,8 +2,10 @@ from datetime import datetime
 from random import choice, randint
 from statistics import median_high
 from threading import Thread
-from time import perf_counter
+from time import perf_counter, sleep
 from typing import Dict
+
+from pymongo.errors import ConnectionFailure
 
 from utils import csv_process, fuse_host, kobayashi_reset
 from utils import preferences as p
@@ -15,9 +17,11 @@ kobayashi_counter = 0
 rebalance = False
 se_pair = []
 se_pair_list = []
+region_index_cache = {}
 
 fuse_date = p.fuse_date
 
+start_time = perf_counter()
 
 # Custom class to return a value from a thread
 class CustomThread(Thread):
@@ -92,8 +96,16 @@ def sorted_running_count_func() -> Dict[int, int]:
 
 def make_sem_set():
     # Create a list of SEs with SEM
-    sem = p.se_info.find({"sem": {"$eq": True}}, {"se": 1, "_id": 0})
     sem_set = set()
+    for _ in range(5):
+        try:
+            sem = p.se_info.find({"sem": {"$eq": True}}, {"se": 1, "_id": 0})
+            break
+        except ConnectionFailure as e:
+            print(" *** Connect error getting SEMs from se_info collection.")
+            print(f" *** Sleeping for {pow(2, _)} seconds and trying again.")
+            sleep(pow(2, _))
+            print(e)
     for x in sem:
         sem_set.add(x["se"])
     if len(sem_set) > 0:
@@ -182,7 +194,15 @@ def waterline_target():
 
 def last_match_date(se1, se2):
     # Get the last match date for se1 and se2
-    match_check = p.cwa_matches.find_one({"SE": se1})["assignments"]
+    for _ in range(5):
+        try:
+            match_check = p.cwa_matches.find_one({"SE": se1})["assignments"]
+            break
+        except ConnectionFailure as e:
+            print(" *** Connect error getting last match date from cwa_matches collection.")
+            print(f" *** Sleeping for {pow(2, _)} seconds and trying again.")
+            sleep(pow(2, _))
+            print(e)
     for x, y in match_check.items():
         if y == se2:
             match_date = x
@@ -202,15 +222,99 @@ def write_matches_to_file(matches_filename):
     '''Write matches to file'''
     print(f"Writing matches to {matches_filename}")
     matches_file = open(f".\\match_files\\{matches_filename}", "w")
-    # matches_file.write("SE1_NAME,SE1,SE2,SE2_NAME\n")
     matches_file.write("SE1_NAME,SE1_CCO,SE2_CCO,SE2_NAME\n")
-    for x, y in se_pair_list:
-        # Lookup SE names from se_info collection
-        x_name = p.se_info.find_one({"se": x})["se_name"]
-        y_name = p.se_info.find_one({"se": y})["se_name"]
-        matches_file.write(f"{x_name},{x},{y},{y_name}\n")
+    # Pre-fetch all SE info in a single query and create a dictionary for quick lookup.
+    se_ids = {se for pair in se_pair_list for se in pair}
+    for _ in range(5):
+        try:
+            se_info_dict = {doc['se']: doc['se_name'] for doc in p.se_info.find({"se": {"$in": list(se_ids)}})}
+            break
+        except ConnectionFailure as e:
+            print(" *** Connect error getting se_info from se_info collection.")
+            print(f" *** Sleeping for {pow(2, _)} seconds and trying again.")
+            sleep(pow(2, _))
+            print(e)
+
+    # Use a context manager to handle the file writing.
+    with open(f".\\match_files\\{matches_filename}", 'a') as matches_file:
+        for x, y in se_pair_list:
+            # Lookup SE names from the pre-fetched dictionary.
+            x_name = se_info_dict.get(x, 'Unknown')
+            y_name = se_info_dict.get(y, 'Unknown')
+            matches_file.write(f"{x_name},{x},{y},{y_name}\n")
     matches_file.close()
     print(" File written.")
+
+
+def lookup_region(se2):
+    # lookup region for se2
+    for _ in range(5):
+        try:
+            se2_info = p.se_info.find_one({"se": se2})
+            break
+        except ConnectionFailure as e:
+            print(
+                f" *** Connect error getting SE {se2} from se_info collection."
+            )
+            print(f" *** Sleeping for {pow(2, _)} seconds and trying again.")
+            sleep(pow(2, _))
+            print(e)
+    if se2_info:
+        for _ in range(5):
+            try:
+                se2_region_name = se2_info.get("region")
+                break
+            except ConnectionFailure as e:
+                print(
+                    f" *** Connect error getting SE {se2} from se_info collection."
+                )
+                print(f" *** Sleeping for {pow(2, _)} seconds and trying again.")
+                sleep(pow(2, _))
+                print(e)
+        if se2_region_name:
+            # Use the cached value if available
+            if se2_region_name not in region_index_cache:
+                # Lookup and cache the region index if not already done
+                for _ in range(5):
+                    try:
+                        se2_region_doc = p.cwa_regions.find_one({"Region": se2_region_name})
+                        break
+                    except ConnectionFailure as e:
+                        print(
+                            f" *** Connect error getting SE {se2} from cwa_regions collection."
+                        )
+                        print(f" *** Sleeping for {pow(2, _)} seconds and trying again.")
+                        sleep(pow(2, _))
+                        print(e)
+                if se2_region_doc:
+                    region_index_cache[se2_region_name] = se2_region_doc.get("Index")
+        # Get the region index from the cache
+        se2_region = region_index_cache.get(se2_region_name)
+        return se2_region, se2_region_name
+
+
+def update_cwa_matches(se, other_value, assignment_date, max_retries=5):
+    attempts = 0
+    while attempts < max_retries:
+        try:
+            p.cwa_matches.update_one(
+                {"SE": se},
+                {"$set": {assignment_date: other_value}},
+                upsert=True
+            )
+            print(f" Added {se} match to database.")
+            return True  # Update successful
+        except Exception as e:
+            attempts += 1
+            print(f"Error updating {se} to cwa_matches collection on attempt {attempts}.")
+            print(e)
+            if attempts == max_retries:
+                # Decide how to handle the error after all retries fail
+                print(f"Failed to update {se} after {max_retries} attempts.")
+                # You might want to log this error, send a notification, or take other action.
+                return False  # Update failed after retries
+            # If you need to wait before retrying, you can add a sleep here:
+            # time.sleep(some_delay)
 
 
 # Parse the received csv file and create two lists of SEs
@@ -452,28 +556,23 @@ while count > 0 and kobayashi_counter < 5:
             # if se1 is VIP, select an se not in sem_list
             se2 = choice(list(SEs - sem_set - zero_set - vips))
             # lookup region for se2
-            se2_region_name = p.se_info.find_one({"se": se2})["region"]
-            se2_region = p.cwa_regions.find_one({"Region": se2_region_name})["Index"]
-            del se2_region_name
+            se2_region, se2_region_name = lookup_region(se2)
             print(f" SE2 {se2} selected from region {se2_region}.")
+            del se2_region_name
             # del vips, valid_ses, zero_set <- TODO: Move this down, after selecting SE2
         elif SSEM is True:
             print(" SE2 selection for SE1 SSEM.")
             # if se1 is SSEM, select an se not in sem_list
             se2 = choice(list(SEs - sem_set - zero_set))
             # lookup region for se2
-            se2_region_name = p.se_info.find_one({"se": se2})["region"]
-            se2_region = p.cwa_regions.find_one({"Region": se2_region_name})["Index"]
-            del se2_region_name
+            se2_region, se2_region_name = lookup_region(se2)
             print(f" SE2 {se2} selected from region {se2_region}.")
         elif SEM is True:
             print(" SE2 selection for SE1 SEM.")
             # if se1 is SEM, select an se not in sem_list
             se2 = choice(list(SEs - sem_set - zero_set))
             # lookup region for se2
-            se2_region_name = p.se_info.find_one({"se": se2})["region"]
-            se2_region = p.cwa_regions.find_one({"Region": se2_region_name})["Index"]
-            del se2_region_name
+            se2_region, se2_region_name = lookup_region(se2)
             print(f" SE2 {se2} selected from region {se2_region}.")
         elif SE is True:
             print(" SE2 selection for SE1 SE.")
@@ -486,8 +585,15 @@ while count > 0 and kobayashi_counter < 5:
 
         if kobayashi is False:
             # Has se1 and se2 been paired before?
-            check_pairing_se2 = p.cwa_matches.find_one({"SE": se2})
-
+            for _ in range(5):
+                try:
+                    check_pairing_se2 = p.cwa_matches.find_one({"SE": se2})
+                    break
+                except ConnectionFailure as e:
+                    print(" *** Connect error getting SE2 from cwa_matches collection.")
+                    print(f" *** Sleeping for {pow(2, _)} seconds and trying again.")
+                    sleep(pow(2, _))
+                    print(e)
             # is assignments empty?
             if not check_pairing_se2["assignments"]:
                 print(f"{se2} has no assignment history. {len(check_pairing_se2["assignments"])}")
@@ -520,7 +626,15 @@ while count > 0 and kobayashi_counter < 5:
 
                     else:
                         # Create a list of previous matches for se1
-                        se1_matches = list(p.cwa_matches.find_one({"SE": se1})["assignments"].values())
+                        for _ in range(5):
+                            try:
+                                se1_matches = list(p.cwa_matches.find_one({"SE": se1})["assignments"].values())
+                                break
+                            except ConnectionFailure as e:
+                                print(" *** Connect error getting SE1 from cwa_matches collection.")
+                                print(f" *** Sleeping for {pow(2, _)} seconds and trying again.")
+                                sleep(pow(2, _))
+                                print(e)
                         # Create a list of SEs that se1 has not been paired with
                         se1_matchables = [x for x in SEs if x not in se1_matches]
                         print(f" Potential matches for se1: {len(se1_matchables)}")
@@ -528,8 +642,7 @@ while count > 0 and kobayashi_counter < 5:
                         if len(se1_matchables) > 0:
                             # Select new se2 from se1_matchables
                             se2 = choice(se1_matchables)
-                            se2_region_name = p.se_info.find_one({"se": se2})["region"]
-                            se2_region = p.cwa_regions.find_one({"Region": se2_region_name})["Index"]
+                            se2_region, se2_region_name = lookup_region(se2)
                             print(f" SE2 {se2} selected from region {se2_region_name}.")
                             try_count = 1
 
@@ -550,11 +663,9 @@ while count > 0 and kobayashi_counter < 5:
                                 # Select a random SE from se1_matchables
                                 se2 = choice(se1_matchables)
                                 # lookup region for se2
-                                se2_region_name = p.se_info.find_one({"se": se2})["region"]
-                                se2_region = p.cwa_regions.find_one({"Region": se2_region_name})["Index"]
+                                se2_region, se2_region_name = lookup_region(se2)
                                 print(f" Selected region {se2_region} with {len(se_dict[se2_region][1])} SEs.")
                                 print(f" SE2 {se2} selected from region {se2_region_name}.")
-
                                 try_count += 1
 
                             print(f" Selected {se2} in {try_count} attempts.")
@@ -679,31 +790,48 @@ if kobayashi is False:
             # Add se1 and se2 to cwa_matches collection
             assignment_date = f"assignments.{fuse_date}"
 
-            try:
-                add_se = p.cwa_matches.update_one(
-                    {"SE": x},
-                    {"$set": {assignment_date: y}},
-                    upsert=True,
-                )
-                print(f" Added {x} match to database.")
-                collection_updates += 1
-            except Exception as e:
-                print(f"Error updating {x} to cwa_matches collection.")
-                print(e)
-                exit(1)
+            '''for _ in range(5):
+                try:
+                    add_se = p.cwa_matches.update_one(
+                        {"SE": x},
+                        {"$set": {assignment_date: y}},
+                        upsert=True,
+                    )
+                    print(f" Added {x} match to database.")
+                    collection_updates += 1
+                    break
+                except Exception as e:
+                    print(f"Error updating {x} to cwa_matches collection.")
+                    print(e)
+                    exit(1)
 
-            try:
-                add_se = p.cwa_matches.update_one(
-                    {"SE": y},
-                    {"$set": {assignment_date: x}},
-                    upsert=True,
-                )
-                print(f" Added {y} match to database.")
+            for _ in range(5):
+                try:
+                    add_se = p.cwa_matches.update_one(
+                        {"SE": y},
+                        {"$set": {assignment_date: x}},
+                        upsert=True,
+                    )
+                    print(f" Added {y} match to database.")
+                    collection_updates += 1
+                except Exception as e:
+                    print(f"Error adding {y} to cwa_matches collection.")
+                    print(e)
+                    exit(1)'''
+
+            # Update SE x
+            if update_cwa_matches(x, y, assignment_date):
                 collection_updates += 1
-            except Exception as e:
-                print(f"Error adding {y} to cwa_matches collection.")
-                print(e)
-                exit(1)
+            else:
+                # Decide how to handle the cumulative error case
+                pass
+
+            # Update SE y
+            if update_cwa_matches(y, x, assignment_date):
+                collection_updates += 1
+            else:
+                # Decide how to handle the cumulative error case
+                pass
 
             print(f"Collection updates: {collection_updates}")
 
@@ -724,3 +852,6 @@ if kobayashi is False:
         print("Error writing matches to file.")
         print(e)
         exit(1)
+
+end_time = perf_counter()
+print(f"Total time to complete: {end_time - start_time:.6f} seconds.")
