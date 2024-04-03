@@ -7,11 +7,19 @@ from typing import Dict
 
 from pymongo.errors import ConnectionFailure
 
-from utils import csv_process, fuse_host, kobayashi_reset
+from utils import (
+    csv_process,
+    fuse_host,
+    kobayashi_reset,
+    se_dict_util,
+    se_info_util,
+    top_ses_util,
+)
 from utils import preferences as p
-from utils import se_dict_util, se_info_util, top_ses_util
 
 test_mode = True
+
+vips = set()
 
 kobayashi_counter = 0
 rebalance = False
@@ -95,7 +103,7 @@ def sorted_running_count_func() -> Dict[int, int]:
     return sorted_running_count
 
 
-def make_sem_set():
+def make_sem_set(ses):
     # Create a list of SEs with SEM
     sem_set = set()
     for _ in range(5):
@@ -108,7 +116,8 @@ def make_sem_set():
             sleep(pow(2, _))
             print(e)
     for x in sem:
-        sem_set.add(x["se"])
+        if x["se"] in ses:
+            sem_set.add(x["se"])
     if len(sem_set) > 0:
         print(f"{len(sem_set)} SEM's to match: {sem_set}")
     else:
@@ -347,7 +356,7 @@ percentile = top_ses_util.top_percentile(se_assignment_count)
 top_ses = top_ses_util.top_ses(se_assignment_count, percentile)
 
 # Create the sem_set
-sem_set = make_sem_set()
+sem_set = make_sem_set(SEs)
 
 """  Main Loop Starts Here  """
 
@@ -502,7 +511,7 @@ while count > 0 and kobayashi_counter < 5:
         if se1_region == 100:
             VIP = True
             # create a set of SEs in region 100
-            vips = set()
+            # vips = set()
             if 100 in se_dict:
                 vips = set(se_dict[100][1])
             print(f" --> {se1} is a VIP.")
@@ -788,7 +797,7 @@ if kobayashi is False:
             # Add se1 and se2 to cwa_matches collection
             assignment_date = f"assignments.{fuse_date}"
 
-            '''for _ in range(5):
+            for _ in range(5):
                 try:
                     add_se = p.cwa_matches.update_one(
                         {"SE": x},
@@ -815,7 +824,7 @@ if kobayashi is False:
                 except Exception as e:
                     print(f"Error adding {y} to cwa_matches collection.")
                     print(e)
-                    exit(1)'''
+                    exit(1)
 
             # Update SE x
             if update_cwa_matches(x, y, assignment_date):

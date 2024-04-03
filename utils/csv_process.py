@@ -7,7 +7,7 @@ def csv_process():
     SEs = set()
     full_SEs = []
     try:
-        with open("20240209_se_select.csv", "r") as f:
+        with open("test-20240403-fuse.csv", "r", encoding="utf-8") as f:
             for line in f:
                 # Split the line at the comma and strip the newline character
                 split_line = line.strip().split(",")
