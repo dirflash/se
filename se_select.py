@@ -7,15 +7,9 @@ from typing import Dict
 
 from pymongo.errors import ConnectionFailure
 
-from utils import (
-    csv_process,
-    fuse_host,
-    kobayashi_reset,
-    se_dict_util,
-    se_info_util,
-    top_ses_util,
-)
+from utils import csv_process, fuse_host, kobayashi_reset
 from utils import preferences as p
+from utils import se_dict_util, se_info_util, top_ses_util
 
 test_mode = True
 
@@ -380,7 +374,7 @@ while count > 0 and kobayashi_counter < 5:
     # The priority_region is the first region in sorted_running_count that has the most SEs
     # If there is a tie, the first region with the lowest index in sorted_running_count is selected.
     # On subsequent loops, the other regions will be selected.
-    priority_region: int = max(sorted_running_count, key=sorted_running_count.get)  # type: int
+    priority_region: int = max(sorted_running_count, key=sorted_running_count.get)
     print(
         f"Region {str(priority_region)} has the most SEs: {sorted_running_count[priority_region]}"
     )
@@ -779,7 +773,7 @@ while count > 0 and kobayashi_counter < 5:
         se_dict = create_se_dict(SEs, full_SEs)
 
         # Create the sem_set
-        sem_set = make_sem_set()
+        sem_set = make_sem_set(SEs)
         print(f"Reset number {kobayashi_counter} complete.\n")
 
 if kobayashi is False:
